@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 # Set page configuration
 st.set_page_config(page_title="Animal Type Predictor", page_icon="🐾", layout="wide")
 
-# Custom CSS to enhance the app's appearance
+# Custom CSS (unchanged)
 st.markdown("""
 <style>
     .main > div {
@@ -67,26 +67,15 @@ def load_and_prepare_data():
         return None
 
 @st.cache_resource
-def build_model(input_dim, output_dim):
-    try:
-        model = Sequential([
-            Dense(32, input_dim=input_dim, activation='relu'),
-            Dense(16, activation='relu'),
-            Dense(output_dim, activation='softmax')
-        ])
-        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-        return model
-    except Exception as e:
-        st.error(f"Error building the model: {e}")
-        return None
-
-def train_model(model, X_train, y_train):
-    try:
-        history = model.fit(X_train, y_train, epochs=50, batch_size=5, validation_split=0.2, verbose=0)
-        return history
-    except Exception as e:
-        st.error(f"Error training the model: {e}")
-        return None
+def build_and_train_model(_X_train, _y_train):
+    model = Sequential([
+        Dense(32, input_dim=_X_train.shape[1], activation='relu'),
+        Dense(16, activation='relu'),
+        Dense(_y_train.shape[1], activation='softmax')
+    ])
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.fit(_X_train, _y_train, epochs=50, batch_size=5, validation_split=0.2, verbose=0)
+    return model
 
 def evaluate_model(model, X_test, y_test):
     try:
@@ -132,67 +121,20 @@ def main():
     </p>
     """, unsafe_allow_html=True)
 
-    if 'data_loaded' not in st.session_state:
-        st.session_state.data_loaded = False
-    if 'model' not in st.session_state:
-        st.session_state.model = None
-    if 'model_trained' not in st.session_state:
-        st.session_state.model_trained = False
+    data = load_and_prepare_data()
+    if data is not None:
+        X_train, X_test, y_train, y_test, label_encoder, scaler, zoo_data = data
+        model = build_and_train_model(X_train, y_train)
 
-    st.sidebar.title("Navigation")
-    option = st.sidebar.radio("Choose an option", ["Load Data", "Train Model", "Evaluate Model", "Predict Animal Type"])
+        st.sidebar.title("Navigation")
+        option = st.sidebar.radio("Choose an option", ["Evaluate Model", "Predict Animal Type"])
 
-    if option == "Load Data" or not st.session_state.data_loaded:
-        st.header("📊 Load and Prepare Data")
-        with st.spinner("Loading data..."):
-            data = load_and_prepare_data()
-        if data:
-            st.session_state.X_train, st.session_state.X_test, st.session_state.y_train, st.session_state.y_test, st.session_state.label_encoder, st.session_state.scaler, zoo_data = data
-            st.session_state.data_loaded = True
-            st.success("✅ Data loaded and prepared successfully!")
-            st.subheader("Preview of the Zoo Dataset")
-            st.dataframe(zoo_data.style.highlight_max(axis=0))
-        else:
-            st.error("❌ Failed to load data. Please check your data file and try again.")
-
-    elif option == "Train Model":
-        st.header("🧠 Train Model")
-        if st.session_state.data_loaded:
-            if st.button("🚀 Train Model"):
-                with st.spinner("Training in progress..."):
-                    st.session_state.model = build_model(st.session_state.X_train.shape[1], st.session_state.y_train.shape[1])
-                    if st.session_state.model:
-                        history = train_model(st.session_state.model, st.session_state.X_train, st.session_state.y_train)
-                        if history:
-                            st.session_state.model_trained = True
-                            st.success("✅ Model trained successfully!")
-                            
-                            fig, ax = plt.subplots(1, 2, figsize=(15, 5))
-                            ax[0].plot(history.history['accuracy'], label='Training Accuracy')
-                            ax[0].plot(history.history['val_accuracy'], label='Validation Accuracy')
-                            ax[0].set_title('Model Accuracy', fontsize=14)
-                            ax[0].set_ylabel('Accuracy', fontsize=12)
-                            ax[0].set_xlabel('Epoch', fontsize=12)
-                            ax[0].legend(fontsize=10)
-
-                            ax[1].plot(history.history['loss'], label='Training Loss')
-                            ax[1].plot(history.history['val_loss'], label='Validation Loss')
-                            ax[1].set_title('Model Loss', fontsize=14)
-                            ax[1].set_ylabel('Loss', fontsize=12)
-                            ax[1].set_xlabel('Epoch', fontsize=12)
-                            ax[1].legend(fontsize=10)
-
-                            st.pyplot(fig)
-        else:
-            st.error("❗ Please load the data first.")
-
-    elif option == "Evaluate Model":
-        st.header("📊 Evaluate Model")
-        if st.session_state.model_trained:
+        if option == "Evaluate Model":
+            st.header("📊 Evaluate Model")
             if st.button("🔍 Evaluate Model"):
                 with st.spinner("Evaluating model..."):
                     try:
-                        evaluation_results = evaluate_model(st.session_state.model, st.session_state.X_test, st.session_state.y_test)
+                        evaluation_results = evaluate_model(model, X_test, y_test)
                         if evaluation_results:
                             test_loss, test_accuracy, precision, recall, f1 = evaluation_results
                             col1, col2, col3 = st.columns(3)
@@ -209,12 +151,9 @@ def main():
                     except Exception as e:
                         st.error(f"An unexpected error occurred: {str(e)}")
                         st.error(f"Error type: {type(e).__name__}")
-        else:
-            st.error("❗ Model is not trained yet. Please train the model first.")
 
-    elif option == "Predict Animal Type":
-        st.header("🔮 Predict Animal Type")
-        if st.session_state.model_trained:
+        elif option == "Predict Animal Type":
+            st.header("🔮 Predict Animal Type")
             st.subheader("Input Animal Features")
             feature_names = [
                 "Hair", "Feathers", "Eggs", "Milk", "Airborne",
@@ -233,11 +172,11 @@ def main():
 
             if st.button("🔍 Predict"):
                 with st.spinner("Making prediction..."):
-                    prediction = make_prediction(st.session_state.model, st.session_state.scaler, st.session_state.label_encoder, entries)
+                    prediction = make_prediction(model, scaler, label_encoder, entries)
                 if prediction:
                     st.success(f"🎉 The predicted animal is a **{prediction}**.")
-        else:
-            st.error("❗ Model not trained yet. Please train the model first.")
+    else:
+        st.error("Failed to load data. Please check your data file and try again.")
 
 if __name__ == "__main__":
     main()
