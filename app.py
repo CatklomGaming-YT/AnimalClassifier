@@ -66,6 +66,7 @@ def load_and_prepare_data():
         st.error(f"Error loading and preparing data: {e}")
         return None
 
+@st.cache_resource
 def build_model(input_dim, output_dim):
     try:
         model = Sequential([
@@ -100,7 +101,10 @@ def evaluate_model(model, X_test, y_test):
         
         return test_loss, test_accuracy, precision, recall, f1
     except Exception as e:
-        st.error(f"Error evaluating the model: {e}")
+        st.error(f"Error evaluating the model: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        st.error(f"X_test shape: {X_test.shape}, y_test shape: {y_test.shape}")
+        st.error(f"Model input shape: {model.input_shape}, output shape: {model.output_shape}")
         return None
 
 def make_prediction(model, scaler, label_encoder, features):
@@ -187,18 +191,24 @@ def main():
         if st.session_state.model_trained:
             if st.button("🔍 Evaluate Model"):
                 with st.spinner("Evaluating model..."):
-                    evaluation_results = evaluate_model(st.session_state.model, st.session_state.X_test, st.session_state.y_test)
-                if evaluation_results:
-                    test_loss, test_accuracy, precision, recall, f1 = evaluation_results
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Test Accuracy", f"{test_accuracy:.2%}")
-                        st.metric("Test Loss", f"{test_loss:.4f}")
-                    with col2:
-                        st.metric("Precision", f"{precision:.2%}")
-                        st.metric("Recall", f"{recall:.2%}")
-                    with col3:
-                        st.metric("F1 Score", f"{f1:.2%}")
+                    try:
+                        evaluation_results = evaluate_model(st.session_state.model, st.session_state.X_test, st.session_state.y_test)
+                        if evaluation_results:
+                            test_loss, test_accuracy, precision, recall, f1 = evaluation_results
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Test Accuracy", f"{test_accuracy:.2%}")
+                                st.metric("Test Loss", f"{test_loss:.4f}")
+                            with col2:
+                                st.metric("Precision", f"{precision:.2%}")
+                                st.metric("Recall", f"{recall:.2%}")
+                            with col3:
+                                st.metric("F1 Score", f"{f1:.2%}")
+                        else:
+                            st.error("Evaluation failed. Please check the error messages above.")
+                    except Exception as e:
+                        st.error(f"An unexpected error occurred: {str(e)}")
+                        st.error(f"Error type: {type(e).__name__}")
         else:
             st.error("❗ Model is not trained yet. Please train the model first.")
 
@@ -225,7 +235,7 @@ def main():
                 with st.spinner("Making prediction..."):
                     prediction = make_prediction(st.session_state.model, st.session_state.scaler, st.session_state.label_encoder, entries)
                 if prediction:
-                    st.success(f"🎉 The predicted animal is classified as **{prediction}**.")
+                    st.success(f"🎉 The predicted animal is a **{prediction}**.")
         else:
             st.error("❗ Model not trained yet. Please train the model first.")
 
